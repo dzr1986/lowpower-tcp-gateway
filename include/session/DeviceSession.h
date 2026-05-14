@@ -4,6 +4,7 @@
 #include <nlohmann/json.hpp>
 
 #include <array>
+#include <atomic>
 #include <deque>
 #include <memory>
 #include <string>
@@ -72,11 +73,15 @@ private:
     void registerOnlineState(const DeviceState& state);
     void updateRedisOnline(const DeviceState& state);
     void handleDisconnect();
+    void enqueueWrite(const std::vector<uint8_t>& data);
+    void flushWrites();
 
 private:
     tcp::socket socket_;
     asio::streambuf read_buffer_;
-    std::deque<std::string> write_queue_;
+    asio::strand<asio::any_io_executor> write_strand_;
+    std::deque<std::shared_ptr<std::vector<uint8_t>>> write_queue_;
+    bool write_in_progress_ = false;
 
     GatewayContext& ctx_;
     AppRuntimeConfig cfg_;
@@ -85,6 +90,7 @@ private:
 
     std::string device_id_;
     std::string remote_addr_;
+    std::atomic_bool closing_{false};
 
     std::array<uint8_t, protocol::lowpower::HEADER_SIZE> lowpower_header_{};
     std::vector<uint8_t> lowpower_payload_;

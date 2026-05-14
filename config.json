@@ -3,7 +3,8 @@
     "tcp_port": 9000,
     "http_port": 8080,
     "heartbeat_default_sec": 180,
-    "idle_timeout_sec": 600
+    "idle_timeout_sec": 600,
+    "worker_threads": 4
   },
   "redis": {
     "host": "redis",
@@ -21,5 +22,17 @@
     "ack_timeout_ms": 5000,
     "max_retry": 3,
     "expire_ms": 300000
+  },
+  "mqtt": {
+    "enable": true,
+    "host": "mqtt",
+    "port": 1883,
+    "client_id": "lowpower-tcp-gateway",
+    "username": "",
+    "password": "",
+    "qos": 1,
+    "keepalive_sec": 30,
+    "topic_prefix": "lp_gateway",
+    "command_request_topic": "devices/+/commands/request"
   }
 }

@@ -1,10 +1,14 @@
 #include <asio.hpp>
 
+#include <algorithm>
 #include <exception>
 #include <iostream>
 #include <string>
+#include <thread>
+#include <vector>
 
 #include "AppConfig.h"
+#include "backend/MqttBackend.h"
 #include "GatewayContext.h"
 #include "HttpAdminServer.h"
 #include "TcpGatewayServer.h"
@@ -53,6 +57,15 @@ int main(int argc, char* argv[]) {
         WakeManager wake(io, ctx, wake_cfg);
         ctx.wake_manager = &wake;
 
+        MqttBackend mqtt(io, ctx, cfg.mqtt);
+        if (cfg.mqtt.enable) {
+            if (!mqtt.start()) {
+                std::cerr << "[MQTT] failed to start backend bridge" << std::endl;
+                return 1;
+            }
+            ctx.mqtt_backend = &mqtt;
+        }
+
         TcpGatewayServer tcp_server(io, ctx, cfg.server, session_cfg);
         HttpAdminServer http_server(io, ctx, cfg.server);
 
@@ -60,7 +73,29 @@ int main(int argc, char* argv[]) {
         tcp_server.start();
         http_server.start();
 
+        unsigned int worker_threads = cfg.server.worker_threads > 0
+            ? static_cast<unsigned int>(cfg.server.worker_threads)
+            : std::max(1u, std::thread::hardware_concurrency());
+
+        std::cout << "[RUNTIME] io workers=" << worker_threads << std::endl;
+
+        std::vector<std::thread> workers;
+        workers.reserve(worker_threads > 0 ? worker_threads - 1 : 0);
+
+        for (unsigned int i = 1; i < worker_threads; ++i) {
+            workers.emplace_back([&io]() {
+                io.run();
+            });
+        }
+
         io.run();
+
+        for (auto& worker : workers) {
+            if (worker.joinable()) {
+                worker.join();
+            }
+        }
+
         return 0;
     } catch (const std::exception& ex) {
         std::cerr << "[FATAL] " << ex.what() << std::endl;

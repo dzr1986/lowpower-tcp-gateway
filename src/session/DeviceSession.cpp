@@ -1,5 +1,6 @@
 #include "session/DeviceSession.h"
 
+#include "backend/MqttBackend.h"
 #include "protocol/JsonLineProtocol.h"
 #include "protocol/LowPowerProtocol.h"
 #include "storage/RedisStore.h"
@@ -13,6 +14,7 @@ DeviceSession::DeviceSession(
     const AppRuntimeConfig& cfg
 )
     : socket_(std::move(socket)),
+    write_strand_(asio::make_strand(socket_.get_executor())),
       ctx_(ctx),
       cfg_(cfg) {}
 
@@ -39,51 +41,55 @@ void DeviceSession::close() {
 }
 
 void DeviceSession::sendJson(const nlohmann::json& j) {
-    auto self = shared_from_this();
     auto line = protocol::jsonline::encodeLine(j);
+    enqueueWrite(std::vector<uint8_t>(line.begin(), line.end()));
+}
 
-    asio::post(socket_.get_executor(), [this, self, line]() {
-        bool writing = !write_queue_.empty();
-        write_queue_.push_back(line);
+void DeviceSession::sendRaw(const std::vector<uint8_t>& data) {
+    enqueueWrite(data);
+}
 
-        if (!writing) {
-            auto self2 = shared_from_this();
+void DeviceSession::enqueueWrite(const std::vector<uint8_t>& data) {
+    auto self = shared_from_this();
+    auto buffer = std::make_shared<std::vector<uint8_t>>(data);
 
-            asio::async_write(
-                socket_,
-                asio::buffer(write_queue_.front()),
-                [this, self2](std::error_code ec, std::size_t) {
-                    if (ec) {
-                        handleDisconnect();
-                        return;
-                    }
+    asio::post(write_strand_, [this, self, buffer]() {
+        write_queue_.push_back(buffer);
 
-                    write_queue_.pop_front();
-
-                    if (!write_queue_.empty()) {
-                        sendJson(nlohmann::json::parse(write_queue_.front()));
-                    }
-                }
-            );
+        if (!write_in_progress_) {
+            flushWrites();
         }
     });
 }
 
-void DeviceSession::sendRaw(const std::vector<uint8_t>& data) {
-    auto self = shared_from_this();
-    auto buf = std::make_shared<std::vector<uint8_t>>(data);
+void DeviceSession::flushWrites() {
+    if (write_queue_.empty()) {
+        write_in_progress_ = false;
+        return;
+    }
 
-    asio::post(socket_.get_executor(), [this, self, buf]() {
-        asio::async_write(
-            socket_,
-            asio::buffer(*buf),
-            [this, self, buf](std::error_code ec, std::size_t) {
+    write_in_progress_ = true;
+
+    auto self = shared_from_this();
+    auto buffer = write_queue_.front();
+
+    asio::async_write(
+        socket_,
+        asio::buffer(*buffer),
+        asio::bind_executor(
+            write_strand_,
+            [this, self, buffer](std::error_code ec, std::size_t) {
                 if (ec) {
+                    write_in_progress_ = false;
                     handleDisconnect();
+                    return;
                 }
+
+                write_queue_.pop_front();
+                flushWrites();
             }
-        );
-    });
+        )
+    );
 }
 
 void DeviceSession::readAutoDetect() {
@@ -554,9 +560,17 @@ void DeviceSession::updateRedisOnline(const DeviceState& state) {
         },
         cfg_.idle_timeout_sec
     );
+
+    if (ctx_.mqtt_backend) {
+        ctx_.mqtt_backend->publishDeviceState(state);
+    }
 }
 
 void DeviceSession::handleDisconnect() {
+    if (closing_.exchange(true)) {
+        return;
+    }
+
     if (!device_id_.empty()) {
         {
             std::lock_guard<std::mutex> lock(ctx_.mutex);
@@ -570,6 +584,10 @@ void DeviceSession::handleDisconnect() {
 
         if (ctx_.redis) {
             ctx_.redis->setOffline(device_id_);
+        }
+
+        if (ctx_.mqtt_backend) {
+            ctx_.mqtt_backend->publishDeviceOffline(device_id_);
         }
 
         std::cout << "[DISCONNECT] device=" << device_id_ << std::endl;

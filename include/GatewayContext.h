@@ -9,6 +9,7 @@
 class DeviceSession;
 class RedisStore;
 class WakeManager;
+class MqttBackend;
 
 struct DeviceState {
     std::string device_id;
@@ -37,4 +38,5 @@ struct GatewayContext {
 
     RedisStore* redis = nullptr;
     WakeManager* wake_manager = nullptr;
+    MqttBackend* mqtt_backend = nullptr;
 };

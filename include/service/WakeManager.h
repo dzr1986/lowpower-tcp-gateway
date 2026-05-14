@@ -2,6 +2,7 @@
 
 #include <asio.hpp>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <unordered_map>
 #include <memory>
 #include <string>
@@ -52,6 +53,13 @@ public:
 private:
     std::string makeMsgId();
     long long nowMs();
+    void publishCommandEvent(
+        const std::string& device_id,
+        const std::string& msg_id,
+        const std::string& status,
+        const std::string& cmd,
+        const std::optional<nlohmann::json>& extra = std::nullopt
+    );
 
     void scheduleTick();
     void onTick();

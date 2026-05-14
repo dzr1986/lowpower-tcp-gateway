@@ -1,5 +1,6 @@
 #include "service/WakeManager.h"
 
+#include "backend/MqttBackend.h"
 #include "protocol/JsonLineProtocol.h"
 #include "protocol/LowPowerProtocol.h"
 #include "storage/RedisStore.h"
@@ -29,6 +30,33 @@ long long WakeManager::nowMs() {
 
 std::string WakeManager::makeMsgId() {
     return "W" + std::to_string(nowMs());
+}
+
+void WakeManager::publishCommandEvent(
+    const std::string& device_id,
+    const std::string& msg_id,
+    const std::string& status,
+    const std::string& cmd,
+    const std::optional<nlohmann::json>& extra
+) {
+    if (!ctx_.mqtt_backend) {
+        return;
+    }
+
+    nlohmann::json payload = {
+        {"device_id", device_id},
+        {"msg_id", msg_id},
+        {"status", status},
+        {"cmd", cmd}
+    };
+
+    if (extra.has_value()) {
+        for (auto it = extra->begin(); it != extra->end(); ++it) {
+            payload[it.key()] = it.value();
+        }
+    }
+
+    ctx_.mqtt_backend->publishCommandEvent(device_id, payload);
 }
 
 std::string WakeManager::sendWake(
@@ -94,6 +122,14 @@ std::string WakeManager::sendWake(
     }
 
     session->sendJson(payload);
+
+    publishCommandEvent(
+        device_id,
+        msg_id,
+        "dispatched",
+        cmd,
+        nlohmann::json{{"protocol", "json_line"}}
+    );
 
     std::cout << "[WAKE_SEND_JSON] device=" << device_id
               << " msg_id=" << msg_id
@@ -165,6 +201,14 @@ std::string WakeManager::sendLowPowerWake(const std::string& device_id) {
 
     session->sendRaw(raw);
 
+    publishCommandEvent(
+        device_id,
+        msg_id,
+        "dispatched",
+        pending.cmd,
+        nlohmann::json{{"protocol", "lowpower"}}
+    );
+
     std::cout << "[WAKE_SEND_LOWPOWER] device=" << device_id
               << " msg_id=" << msg_id
               << std::endl;
@@ -181,6 +225,13 @@ void WakeManager::markAck(const std::string& msg_id) {
 
     std::cout << "[WAKE_ACK_OK] msg_id=" << msg_id << std::endl;
 
+    publishCommandEvent(
+        it->second.device_id,
+        msg_id,
+        "acked",
+        it->second.cmd
+    );
+
     pending_.erase(it);
 }
 
@@ -194,6 +245,13 @@ void WakeManager::markDone(const std::string& msg_id) {
     if (ctx_.redis) {
         ctx_.redis->removePendingWake(it->second.device_id, msg_id);
     }
+
+    publishCommandEvent(
+        it->second.device_id,
+        msg_id,
+        "done",
+        it->second.cmd
+    );
 
     pending_.erase(it);
 }
@@ -226,6 +284,14 @@ void WakeManager::onTick() {
                       << " msg_id=" << p.msg_id
                       << std::endl;
 
+            publishCommandEvent(
+                p.device_id,
+                p.msg_id,
+                "failed",
+                p.cmd,
+                nlohmann::json{{"retry_count", p.retry_count}}
+            );
+
             remove_list.push_back(p.msg_id);
             continue;
         }
@@ -256,6 +322,14 @@ void WakeManager::retryWake(PendingWake& pending) {
               << " msg_id=" << pending.msg_id
               << " retry=" << pending.retry_count
               << std::endl;
+
+    publishCommandEvent(
+        pending.device_id,
+        pending.msg_id,
+        "retrying",
+        pending.cmd,
+        nlohmann::json{{"retry_count", pending.retry_count}}
+    );
 
     if (pending.protocol == SessionProtocol::JSON_LINE) {
         session->sendJson(pending.payload);

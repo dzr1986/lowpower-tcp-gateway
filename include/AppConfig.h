@@ -8,6 +8,7 @@ struct ServerConfig {
     int http_port = 8080;
     int heartbeat_default_sec = 180;
     int idle_timeout_sec = 600;
+    int worker_threads = 0;
 };
 
 struct RedisConfig {
@@ -30,11 +31,25 @@ struct WakeConfig {
     int expire_ms = 300000;
 };
 
+struct MqttConfig {
+    bool enable = true;
+    std::string host = "mqtt";
+    int port = 1883;
+    std::string client_id = "lowpower-tcp-gateway";
+    std::string username;
+    std::string password;
+    int qos = 1;
+    int keepalive_sec = 30;
+    std::string topic_prefix = "lp_gateway";
+    std::string command_request_topic = "devices/+/commands/request";
+};
+
 struct AppConfig {
     ServerConfig server;
     RedisConfig redis;
     AuthConfig auth;
     WakeConfig wake;
+    MqttConfig mqtt;
 
     static AppConfig load(const std::string& path);
 };

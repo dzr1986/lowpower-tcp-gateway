@@ -52,7 +52,15 @@ private:
             auto device_id = extractDeviceId(url);
             auto cmd = extractQuery(url, "cmd");
             if (cmd.empty()) cmd = "take_photo";
-            handleWake(device_id, cmd);
+            handleCommand(device_id, cmd);
+            return;
+        }
+
+        if (method == "POST" && url.find("/api/devices/") == 0 && url.find("/commands") != std::string::npos) {
+            auto device_id = extractDeviceId(url);
+            auto cmd = extractQuery(url, "cmd");
+            if (cmd.empty()) cmd = "take_photo";
+            handleCommand(device_id, cmd);
             return;
         }
 
@@ -116,7 +124,7 @@ private:
         });
     }
 
-    void handleWake(const std::string& device_id, const std::string& cmd) {
+    void handleCommand(const std::string& device_id, const std::string& cmd) {
         try {
             if (!ctx_.wake_manager) {
                 response(500, {{"error", "wake_manager_not_ready"}});
