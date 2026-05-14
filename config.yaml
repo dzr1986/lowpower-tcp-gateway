@@ -1,0 +1,38 @@
+# Low-Power TCP Gateway – default configuration
+# All values can be overridden with GATEWAY_* environment variables.
+
+log_level: INFO
+
+server:
+  host: "0.0.0.0"
+  port: 9000
+  max_connections: 1000
+  max_frame_size: 65535
+
+timeouts:
+  # Seconds to wait for a heartbeat before closing a connection
+  heartbeat: 60
+  # Seconds of inactivity before a session is reaped entirely
+  session: 300
+  # Per-read timeout
+  read: 30
+
+backends:
+  mqtt:
+    enabled: false
+    host: "localhost"
+    port: 1883
+    username: ""
+    password: ""
+    client_id: "lowpower-gateway"
+    topic_prefix: "gateway"
+    keepalive: 60
+    qos: 1
+    tls: false
+
+  http:
+    enabled: false
+    url: "http://localhost:8080/data"
+    timeout: 5.0
+    auth_token: ""
+    headers: {}

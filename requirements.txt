@@ -1,0 +1,9 @@
+# Core
+PyYAML>=6.0
+
+# Optional backends (install the ones you need)
+# MQTT support
+aiomqtt>=1.0.0
+
+# HTTP support
+aiohttp>=3.9.0

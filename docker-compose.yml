@@ -1,0 +1,45 @@
+version: "3.9"
+
+services:
+  gateway:
+    build: .
+    image: lowpower-tcp-gateway:latest
+    container_name: lowpower-gateway
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    environment:
+      - GATEWAY_LOG_LEVEL=INFO
+      # Uncomment and configure MQTT backend:
+      # - GATEWAY_MQTT_ENABLED=true
+      # - GATEWAY_MQTT_HOST=mosquitto
+      # - GATEWAY_MQTT_PORT=1883
+      # Uncomment and configure HTTP backend:
+      # - GATEWAY_HTTP_ENABLED=true
+      # - GATEWAY_HTTP_URL=http://backend:8080/data
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    networks:
+      - gateway-net
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import socket; s=socket.socket(); s.settimeout(2); s.connect(('localhost',9000)); s.close()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # Optional: MQTT broker
+  # mosquitto:
+  #   image: eclipse-mosquitto:2
+  #   container_name: mosquitto
+  #   ports:
+  #     - "1883:1883"
+  #   volumes:
+  #     - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+  #   networks:
+  #     - gateway-net
+
+networks:
+  gateway-net:
+    driver: bridge
