@@ -1,0 +1,25 @@
+{
+  "server": {
+    "tcp_port": 9000,
+    "http_port": 8080,
+    "heartbeat_default_sec": 180,
+    "idle_timeout_sec": 600
+  },
+  "redis": {
+    "host": "redis",
+    "port": 6379,
+    "password": "",
+    "db": 0,
+    "prefix": "lp:"
+  },
+  "auth": {
+    "enable": true,
+    "timestamp_window_sec": 300,
+    "dev_default_secret": "DEV_ONLY_CHANGE_ME"
+  },
+  "wake": {
+    "ack_timeout_ms": 5000,
+    "max_retry": 3,
+    "expire_ms": 300000
+  }
+}

@@ -1,0 +1,10 @@
+build/
+CMakeCache.txt
+CMakeFiles/
+cmake-build-*/
+compile_commands.json
+
+.vscode/
+.idea/
+*.swp
+*.swo
